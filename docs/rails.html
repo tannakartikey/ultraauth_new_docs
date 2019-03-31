@@ -1,0 +1,154 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <!-- Use the title from a page's frontmatter if it has one -->
+    <title>Middleman</title>
+    <link href="/stylesheets/site.css" rel="stylesheet" />
+    <script src="/javascripts/site.js"></script>
+  </head>
+  <body>
+    <h1>Ruby on Rails Biometric Login</h1>
+
+<p>The tutorial demonstrates how a Ruby on Rails application can implement secure biometric login using UltraAuth.</p>
+
+<h2>Configure UltraAuth</h2>
+
+<h3>Get Your Application Crdentials</h3>
+
+<p>You will require <code>OPENID_CLIENT_ID</code> and <code>OPENID_CLIENT_SECRET</code> which are necessary for your app to communicate with UltraAuth.</p>
+
+<p>You can follow the following steps to retrieve them:</p>
+
+<h4>Create a Client Application</h4>
+
+<ol>
+<li>Login/Signup on <a href="https://ultraauth.com">UltraAuth</a>.</li>
+<li>Click on &lsquo;Create an Application&rsquo; and select &lsquo;Ruby on Rails&rsquo;</li>
+<li>The application will be created and you will prompted with the <code>OPENID_CLIENT_ID</code> and <code>OPENID_CLIENT_SECRET</code> of the application. <img src="/images/ultra_auth_credentials.png" alt="UltraAuth Credentials" /></li>
+</ol>
+
+<h4>Configure the Callback URL</h4>
+
+<p>A callback URL is a URL in your application where the authenticated users are redirected once they have finished the bitometric authentication with UltraAuth.</p>
+
+<p>You need to configure the callback URL for your application. You can do it by clicking on the <em>edit callback URL</em> option as highlighted in the image below.</p>
+
+<p>If you do not set the callback URL your users will see a <code>redire_uri_mismatch</code> error when they try to login.</p>
+
+<p><img src="/images/ultra_auth_edit_callback_url_highlighted.png" alt="UltraAuth Edit Callback URL" /></p>
+
+<p>The Callback URL should be your domain followed by <code>/auth/ultraauth/callback</code>. For example, if your domain is <em>http://example.com</em> then your callback URL will be <em>http://example.com/auth/ultraauth/callback</em>. If you are developing locally, you may set it to <em>localhost</em> also i.e. <em>http://localhost:8000</em>.</p>
+
+<h4>Configure the Post Logout URL</h4>
+
+<p>The Post Logout URL is the URL in your application to which the user is redirected after logging out from UltraAuth provider.</p>
+
+<p>For the code of this article to work fine, you need to set the Post Callback URL the same as your domain  e.g. <em>http://localhost:8000</em>  or <em>http://example.com</em>.</p>
+
+<h2>Configure Rails to Use UltraAuth</h2>
+
+<h3>Install the Dependency</h3>
+
+<p>We will be using <a href="https://github.com/omniauth/omniauth">Omniauth</a> gem with <a href="https://github.com/ultraauth/omniauth-ultraauth">omniauth-ultraauth</a> strategy to provide authentication in this Rails app.</p>
+<div class="highlight"><pre class="highlight ruby"><code><span class="n">gem</span> <span class="s1">'omniauth'</span>
+<span class="n">gem</span> <span class="s1">'omniauth-ultraauth'</span>
+</code></pre></div>
+<h3>Initialize Omniauth UltraAuth</h3>
+
+<p>Create a file named <code>ultraauth.rb</code> under <code>config/initializers</code> use the configuration below:</p>
+<div class="highlight"><pre class="highlight ruby"><code>  <span class="no">Rails</span><span class="p">.</span><span class="nf">application</span><span class="p">.</span><span class="nf">config</span><span class="p">.</span><span class="nf">middleware</span><span class="p">.</span><span class="nf">use</span> <span class="no">OmniAuth</span><span class="o">::</span><span class="no">Builder</span> <span class="k">do</span>
+    <span class="n">provider</span> <span class="ss">:ultraauth</span><span class="p">,</span>
+      <span class="no">ENV</span><span class="p">[</span><span class="s1">'OPENID_CLIENT_ID'</span><span class="p">],</span>
+      <span class="no">ENV</span><span class="p">[</span><span class="s1">'OPENID_CLIENT_SECRET'</span><span class="p">],</span>
+      <span class="ss">client_options: </span><span class="p">{</span>
+        <span class="ss">redirect_uri: </span><span class="s2">"</span><span class="si">#{</span><span class="no">ENV</span><span class="p">[</span><span class="s1">'DOMAIN_URL'</span><span class="p">]</span><span class="si">}</span><span class="s2">/auth/ultraauth/callback"</span>
+      <span class="p">}</span>
+  <span class="k">end</span>
+</code></pre></div>
+<h4>Configure ENV Variables</h4>
+
+<p>In initializers we are using the environment variables as you should never store your <code>OPENID_CLIENT_ID</code> and <code>OPENID_CLIENT_SECRET</code> values in the code. You can use a gem like <a href="https://github.com/laserlemon/figaro">Figaro</a> to manage your environment variables. How to configure environment variables is out of the scope for this tutorial.</p>
+
+<p><code>DOMAIN_URL</code> is the full URL of your application e.g. &lsquo;http://localhost:8000&rsquo; or <code>http://example.com</code></p>
+
+<h3>Perform Authentication</h3>
+
+<p>We need a way for users to trigger the authentication. So let&rsquo;s create routes, controllers and views.</p>
+
+<h4>Routes</h4>
+
+<p>Add the following code in your <code>routes.rb</code> file:</p>
+<div class="highlight"><pre class="highlight ruby"><code><span class="c1"># config/routes.rb</span>
+
+<span class="no">Rails</span><span class="p">.</span><span class="nf">application</span><span class="p">.</span><span class="nf">routes</span><span class="p">.</span><span class="nf">draw</span> <span class="k">do</span>
+  <span class="n">root</span> <span class="s1">'home#index'</span>
+  <span class="n">get</span> <span class="s1">'/auth/ultraauth'</span><span class="p">,</span> <span class="ss">as: </span><span class="s1">'omniauth_ultraauth'</span>
+  <span class="n">get</span> <span class="s1">'/auth/ultraauth/callback'</span><span class="p">,</span> <span class="ss">to: </span><span class="s1">'sessions#create'</span><span class="p">,</span> <span class="ss">as: :openid_auth_callback</span>
+</code></pre></div>
+<p>The authentication will be triggered when the user will visit <code>/auth/ultraauth</code> route. The user will be redirected to UltraAuth IDP and once the biometric authentication is performed, the Identity Provider(IDP) server will redirect the request to the callback URL, <code>/auth/ultraauth/callback</code> with the authentication data.</p>
+
+<h3>Controllers</h3>
+
+<p>First, let&rsquo;s generate the controllers.</p>
+<div class="highlight"><pre class="highlight ruby"><code><span class="n">rails</span> <span class="n">generate</span> <span class="n">controller</span> <span class="n">home</span> <span class="n">index</span> <span class="o">--</span><span class="n">skip</span><span class="o">-</span><span class="n">assets</span>
+<span class="n">rails</span> <span class="n">generate</span> <span class="n">controller</span> <span class="n">sessions</span> <span class="n">create</span> <span class="o">--</span><span class="n">skip</span><span class="o">-</span><span class="n">assets</span>
+</code></pre></div>
+<p>Add the following code in the generated <code>home_controller.rb</code>:</p>
+<div class="highlight"><pre class="highlight ruby"><code><span class="c1"># app/controllers/home_controller.rb</span>
+
+<span class="k">class</span> <span class="nc">HomeController</span> <span class="o">&lt;</span> <span class="no">ApplicationController</span>
+  <span class="k">def</span> <span class="nf">index</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre></div>
+<p>Add the following code in the generated <code>sessions_controller.rb</code>:</p>
+<div class="highlight"><pre class="highlight ruby"><code><span class="c1"># app/controllers/sessions_controller.rb</span>
+
+<span class="k">class</span> <span class="nc">SessionsController</span> <span class="o">&lt;</span> <span class="no">ApplicationController</span>
+  <span class="k">def</span> <span class="nf">create</span>
+    <span class="vi">@response_hash</span> <span class="o">=</span> <span class="n">request</span><span class="p">.</span><span class="nf">env</span><span class="p">[</span><span class="s1">'omniauth.auth'</span><span class="p">].</span><span class="nf">to_hash</span>
+  <span class="k">end</span>
+<span class="k">end</span>
+</code></pre></div>
+<h3>Views</h3>
+
+<p>Add the following code to the generated <code>index.html.erb</code> file:</p>
+<div class="highlight"><pre class="highlight ruby"><code><span class="o">&lt;!--</span> <span class="n">app</span><span class="o">/</span><span class="n">views</span><span class="o">/</span><span class="n">home</span><span class="o">/</span><span class="n">index</span><span class="p">.</span><span class="nf">html</span><span class="p">.</span><span class="nf">erb</span> <span class="o">--&gt;</span>
+
+<span class="o">&lt;</span><span class="sx">%= link_to "Login with UltraAuth", omniauth_ultraauth_path %&gt;
+</span></code></pre></div>
+<p>Add the following code in your <code>create.html.erb</code> file:</p>
+<div class="highlight"><pre class="highlight ruby"><code><span class="o">&lt;!--</span> <span class="n">app</span><span class="o">/</span><span class="n">views</span><span class="o">/</span><span class="n">sessions</span><span class="o">/</span><span class="n">create</span><span class="p">.</span><span class="nf">html</span><span class="p">.</span><span class="nf">erb</span> <span class="o">--&gt;</span>
+
+<span class="o">&lt;</span><span class="n">div</span> <span class="k">class</span><span class="o">=</span><span class="s2">"container"</span><span class="o">&gt;</span>
+  <span class="o">&lt;</span><span class="n">div</span> <span class="k">class</span><span class="o">=</span><span class="s2">"row"</span><span class="o">&gt;</span>
+    <span class="o">&lt;</span><span class="n">div</span> <span class="k">class</span><span class="o">=</span><span class="s2">"col-md-6 offset-md-3 text-center"</span><span class="o">&gt;</span>
+      <span class="o">&lt;</span><span class="n">section</span><span class="o">&gt;</span>
+        <span class="o">&lt;</span><span class="n">a</span> <span class="n">href</span><span class="o">=</span><span class="s2">"https://srv.qryp.to/op/session/end?post_logout_redirect_uri=&lt;%= ENV['DOMAIN_URL'] %&gt;&amp;id_token_hint=&lt;%= @response_hash['credentials']['id_token'] %&gt;"</span> <span class="k">class</span><span class="o">=</span><span class="s2">"btn btn-lg btn-primary"</span><span class="o">&gt;</span>
+          <span class="no">Logout</span>
+        <span class="o">&lt;</span><span class="sr">/a&gt;
+
+        &lt;h2&gt;Response from OpenID Provider&lt;/</span><span class="n">h2</span><span class="o">&gt;</span>
+        <span class="o">&lt;</span><span class="n">article</span><span class="o">&gt;</span>
+          <span class="o">&lt;</span><span class="n">h3</span><span class="o">&gt;</span><span class="no">Auth</span> <span class="no">Callback</span> <span class="no">Response</span><span class="o">&lt;</span><span class="sr">/h3&gt;
+          &lt;pre&gt;&lt;%= JSON.pretty_generate @response_hash.as_json %&gt;&lt;/</span><span class="n">pre</span><span class="o">&gt;</span>
+        <span class="o">&lt;</span><span class="sr">/article&gt;
+      &lt;/se</span><span class="n">ction</span><span class="o">&gt;</span>
+    <span class="o">&lt;</span><span class="sr">/div&gt;
+  &lt;/</span><span class="n">div</span><span class="o">&gt;</span>
+<span class="o">&lt;</span><span class="sr">/div&gt;
+</span></code></pre></div>
+<p>That&rsquo;s it!</p>
+
+<p>Once you are redirected from the IDP, if the authentication was successful, you should see the authentication data returned from the server on the page.</p>
+
+<h1>Note</h1>
+
+<p>This app does not start session for authenticated user. Using gems like <a href="https://github.com/plataformatec/devise">Devise</a>, which supports Omniauth, it can be managed very easily.</p>
+
+  </body>
+</html>
