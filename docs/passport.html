@@ -1,0 +1,326 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <!-- Use the title from a page's frontmatter if it has one -->
+    <title>Middleman</title>
+    <link href="/stylesheets/site.css" rel="stylesheet" />
+    <script src="/javascripts/site.js"></script>
+  </head>
+  <body>
+    <h1>PassportJS Biometric Login</h1>
+
+<p>The tutorial demonstrates how a NodeJS application can implement secure biometric login using UltraAuth.</p>
+
+<h2>Configure UltraAuth</h2>
+
+<h3>Get Your Application Crdentials</h3>
+
+<p>You will require <code>OPENID_CLIENT_ID</code> and <code>OPENID_CLIENT_SECRET</code> which are necessary for your app to communicate with UltraAuth.</p>
+
+<p>You can follow the following steps to retrieve them:</p>
+
+<h4>Create a Client Application</h4>
+
+<ol>
+<li>Login/Signup on <a href="https://ultraauth.com">UltraAuth</a>.</li>
+<li>Click on &lsquo;Create an Application&rsquo; and select &lsquo;Node&rsquo;</li>
+<li>The application will be created and you will prompted with the <code>OPENID_CLIENT_ID</code> and <code>OPENID_CLIENT_SECRET</code> of the application. <img src="/images/ultra_auth_credentials.png" alt="UltraAuth Credentials" /></li>
+</ol>
+
+<h4>Configure the Callback URL</h4>
+
+<p>A callback URL is a URL in your application where the authenticated users are redirected once they have finished the bitometric authentication with UltraAuth.</p>
+
+<p>You need to configure the callback URL for your application. You can do it by clicking on the <em>edit callback URL</em> option as highlighted in the image below.</p>
+
+<p>If you do not set the callback URL your users will see a <code>redire_uri_mismatch</code> error when they try to login.</p>
+
+<p><img src="/images/ultra_auth_edit_callback_url_highlighted.png" alt="UltraAuth Edit Callback URL" /></p>
+
+<p>The Callback URL should be your domain followed by <code>/auth/qrypto/callback</code>. For example, if your domain is <em>http://example.com</em> then your callback URL will be <em>http://example.com/auth/qrypto/callback</em>. If you are developing locally, you may set it to <em>localhost</em> also i.e. <em>http://localhost:8000</em>.</p>
+
+<h4>Configure the Post Logout URL</h4>
+
+<p>The Post Logout URL is the URL in your application to which the user is redirected after logging out from UltraAuth provider.</p>
+
+<p>For the code of this article to work fine, you need to set the Post Callback URL the same as your domain  e.g. <em>http://localhost:8000</em>  or <em>http://example.com</em>.</p>
+
+<h2>Configure Node.js to Use UltraAuth</h2>
+
+<h4>Install the Dependency</h4>
+
+<p>We will be requiring the following packages:</p>
+
+<ul>
+<li><a href="https://www.npmjs.com/package/body-parser">bcrypt-nodejs</a> - Node.js body parsing middleware.</li>
+<li><a href="https://www.npmjs.com/package/body-parser">body-parser</a> - Node.js body parsing middleware.</li>
+<li><a href="https://www.npmjs.com/package/connect-flash">connect-flash</a> - a middleware to store flash messages in session</li>
+<li><a href="https://www.npmjs.com/package/cookie-parser">cookie-parser</a> - a middleware to parse cookies</li>
+<li><a href="https://www.npmjs.com/package/ejs">ejs</a> - embedded JavaScript templates</li>
+<li><a href="https://www.npmjs.com/package/express-session">express-session</a> - a middleware to manage sessions</li>
+<li><a href="https://mongoosejs.com/">mongoose</a> - elegant mongodb object modeling for node.js</li>
+<li><a href="http://www.passportjs.org/">passport</a> - an authentication middleware for Node.js</li>
+<li><a href="https://github.com/ultraauth/passport-ultraauth">passport-ultraauth</a> - an UltraAuth authentication strategy for Passport</li>
+<li><a href="http://docs.sequelizejs.com/">sequelize</a> - a promise-based Node.js ORM</li>
+<li><a href="https://www.npmjs.com/package/sqlite3">sqlite3</a> - asynchronous, non-blocking SQLite3 bindings for Node.js.</li>
+</ul>
+<div class="highlight"><pre class="highlight shell"><code><span class="c"># Installation with npm</span>
+npm install bcrypt-nodejs body-parser connect-flash cookie-parser ejs express-session mongoose passport passport-ultraauth sequelize sqlite3 <span class="nt">--save</span>
+
+<span class="c"># Installation with Yarn</span>
+yarn add bcrypt-nodejs body-parser connect-flash cookie-parser ejs express-session mongoose passport passport-ultraauth sequelize sqlite3 <span class="nt">--save</span>
+</code></pre></div>
+<h4>Configure the App</h4>
+
+<p>In <code>config.js</code> put all the credentials and options to connect to UltraAuth successfully.</p>
+<div class="highlight"><pre class="highlight javascript"><code><span class="c1">// config.js</span>
+
+<span class="kd">const</span> <span class="nx">crypto</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s2">"crypto"</span><span class="p">);</span>
+
+<span class="kd">const</span> <span class="nx">config</span> <span class="o">=</span> <span class="p">{};</span>
+
+<span class="nx">config</span><span class="p">.</span><span class="nx">callbackRoot</span> <span class="o">=</span> <span class="nx">process</span><span class="p">.</span><span class="nx">env</span><span class="p">.</span><span class="nx">DOMAIN_URL</span>
+
+<span class="nx">config</span><span class="p">.</span><span class="nx">client</span> <span class="o">=</span> <span class="p">{</span>
+  <span class="na">id</span><span class="p">:</span> <span class="nx">process</span><span class="p">.</span><span class="nx">env</span><span class="p">.</span><span class="nx">OPENID_CLIENT_ID</span><span class="p">,</span>
+  <span class="na">secret</span><span class="p">:</span> <span class="nx">process</span><span class="p">.</span><span class="nx">env</span><span class="p">.</span><span class="nx">OPENID_CLIENT_SECRET</span><span class="p">,</span>
+  <span class="na">redirectURIs</span><span class="p">:</span> <span class="p">[</span> <span class="s2">`</span><span class="p">${</span><span class="nx">config</span><span class="p">.</span><span class="nx">callbackRoot</span><span class="p">}</span><span class="s2">/auth/qrypto/callback`</span> <span class="p">],</span>
+  <span class="na">sessionKey</span><span class="p">:</span> <span class="nx">crypto</span><span class="p">.</span><span class="nx">randomBytes</span><span class="p">(</span><span class="mi">32</span><span class="p">).</span><span class="nx">toString</span><span class="p">(</span><span class="s2">"hex"</span><span class="p">),</span>
+  <span class="na">skipUserProfile</span><span class="p">:</span> <span class="kc">false</span><span class="p">,</span>
+  <span class="na">passReqToCallback</span><span class="p">:</span> <span class="kc">true</span>
+<span class="p">}</span>
+
+<span class="nx">module</span><span class="p">.</span><span class="nx">exports</span> <span class="o">=</span> <span class="nx">config</span><span class="p">;</span>
+</code></pre></div>
+<h4>Passport Strategy</h4>
+
+<p>Configure Passport to use the config which we just created. To support login session, Passport serializes and deserializes user instance to and from the session.</p>
+<div class="highlight"><pre class="highlight javascript"><code><span class="c1">// app/passport.js</span>
+
+<span class="kd">const</span> <span class="nx">OpenIdConnectStrategy</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s2">"passport-ultraauth"</span><span class="p">).</span><span class="nx">Strategy</span><span class="p">;</span>
+<span class="kd">const</span> <span class="nx">User</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s2">"../app/models/user"</span><span class="p">);</span>
+<span class="kd">const</span> <span class="nx">config</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s2">"../config"</span><span class="p">);</span>
+
+<span class="nx">module</span><span class="p">.</span><span class="nx">exports</span> <span class="o">=</span> <span class="p">(</span><span class="nx">passport</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+
+  <span class="nx">passport</span><span class="p">.</span><span class="nx">serializeUser</span><span class="p">((</span><span class="nx">user</span><span class="p">,</span> <span class="nx">done</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+    <span class="nx">done</span><span class="p">(</span><span class="kc">null</span><span class="p">,</span> <span class="nx">user</span><span class="p">.</span><span class="nx">id</span><span class="p">);</span>
+  <span class="p">});</span>
+
+  <span class="nx">passport</span><span class="p">.</span><span class="nx">deserializeUser</span><span class="p">((</span><span class="nx">id</span><span class="p">,</span> <span class="nx">done</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+    <span class="nx">User</span>
+      <span class="p">.</span><span class="nx">findById</span><span class="p">(</span><span class="nx">id</span><span class="p">)</span>
+      <span class="p">.</span><span class="nx">then</span><span class="p">(</span><span class="nx">user</span> <span class="o">=&gt;</span> <span class="nx">done</span><span class="p">(</span><span class="kc">null</span><span class="p">,</span> <span class="nx">user</span><span class="p">))</span>
+      <span class="p">.</span><span class="k">catch</span><span class="p">(</span><span class="nx">error</span> <span class="o">=&gt;</span> <span class="nx">done</span><span class="p">(</span><span class="nx">error</span><span class="p">))</span>
+    <span class="p">;</span>
+  <span class="p">});</span>
+
+  <span class="nx">passport</span><span class="p">.</span><span class="nx">use</span><span class="p">(</span><span class="k">new</span> <span class="nx">OpenIdConnectStrategy</span><span class="p">(</span>
+
+    <span class="nx">config</span><span class="p">.</span><span class="nx">client</span><span class="p">,</span>
+
+    <span class="p">(</span><span class="nx">req</span><span class="p">,</span> <span class="nx">iss</span><span class="p">,</span> <span class="nx">sub</span><span class="p">,</span> <span class="nx">profile</span><span class="p">,</span> <span class="nx">jwtClaims</span><span class="p">,</span> <span class="nx">accessToken</span><span class="p">,</span> <span class="nx">refreshToken</span><span class="p">,</span> <span class="nx">params</span><span class="p">,</span> <span class="nx">done</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+      <span class="nx">process</span><span class="p">.</span><span class="nx">nextTick</span><span class="p">(</span><span class="k">async</span> <span class="p">()</span> <span class="o">=&gt;</span> <span class="p">{</span>
+        <span class="kd">const</span> <span class="nx">user</span> <span class="o">=</span> <span class="p">(</span><span class="o">!</span><span class="nx">req</span><span class="p">.</span><span class="nx">user</span><span class="p">)</span> <span class="p">?</span> <span class="p">(</span><span class="kr">await</span> <span class="nx">User</span><span class="p">.</span><span class="nx">findOrCreate</span><span class="p">({</span> <span class="na">where</span><span class="p">:</span> <span class="p">{</span> <span class="na">qrypto_id</span><span class="p">:</span> <span class="nx">profile</span><span class="p">.</span><span class="nx">id</span> <span class="p">}}))[</span><span class="mi">0</span><span class="p">]</span> <span class="p">:</span> <span class="nx">req</span><span class="p">.</span><span class="nx">user</span><span class="p">;</span>
+        <span class="nx">user</span>
+          <span class="p">.</span><span class="nx">update</span><span class="p">({</span> <span class="na">qrypto_id_token</span><span class="p">:</span> <span class="nx">params</span><span class="p">.</span><span class="nx">id_token</span> <span class="p">})</span>
+          <span class="p">.</span><span class="nx">then</span><span class="p">(()</span> <span class="o">=&gt;</span> <span class="nx">done</span><span class="p">(</span><span class="kc">null</span><span class="p">,</span> <span class="nx">user</span><span class="p">))</span>
+          <span class="p">.</span><span class="k">catch</span><span class="p">((</span><span class="nx">error</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="nx">done</span><span class="p">(</span><span class="nx">error</span><span class="p">))</span>
+        <span class="p">;</span>
+      <span class="p">});</span>
+    <span class="p">}</span>
+
+  <span class="p">));</span>
+
+<span class="p">};</span>
+</code></pre></div>
+<h4>The App</h4>
+
+<p>Now, we will configure the app to use <code>express-session</code> and intialize the Passport strategy.</p>
+<div class="highlight"><pre class="highlight javascript"><code><span class="c1">// app.js</span>
+
+<span class="kd">const</span> <span class="nx">http</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s2">"http"</span><span class="p">);</span>
+<span class="kd">const</span> <span class="nx">app</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s2">"express"</span><span class="p">)();</span>
+<span class="kd">const</span> <span class="nx">passport</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s2">"passport"</span><span class="p">);</span>
+<span class="kd">const</span> <span class="nx">flash</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s2">"connect-flash"</span><span class="p">);</span>
+<span class="kd">const</span> <span class="nx">cookieParser</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s2">"cookie-parser"</span><span class="p">);</span>
+<span class="kd">const</span> <span class="nx">bodyParser</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s2">"body-parser"</span><span class="p">);</span>
+<span class="kd">const</span> <span class="nx">session</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s2">"express-session"</span><span class="p">);</span>
+
+<span class="kd">const</span> <span class="nx">config</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s2">"./config"</span><span class="p">);</span>
+<span class="kd">const</span> <span class="nx">port</span> <span class="o">=</span> <span class="nx">process</span><span class="p">.</span><span class="nx">env</span><span class="p">.</span><span class="nx">PORT</span> <span class="o">||</span> <span class="mi">8003</span><span class="p">;</span>
+
+<span class="nx">require</span><span class="p">(</span><span class="s2">"./app/passport"</span><span class="p">)(</span><span class="nx">passport</span><span class="p">);</span>
+
+<span class="nx">app</span><span class="p">.</span><span class="nx">use</span><span class="p">(</span><span class="nx">cookieParser</span><span class="p">());</span>
+<span class="nx">app</span><span class="p">.</span><span class="nx">use</span><span class="p">(</span><span class="nx">bodyParser</span><span class="p">.</span><span class="nx">json</span><span class="p">());</span>
+<span class="nx">app</span><span class="p">.</span><span class="nx">use</span><span class="p">(</span><span class="nx">bodyParser</span><span class="p">.</span><span class="nx">urlencoded</span><span class="p">({</span> <span class="na">extended</span><span class="p">:</span> <span class="kc">true</span> <span class="p">}));</span>
+
+<span class="nx">app</span><span class="p">.</span><span class="kd">set</span><span class="p">(</span><span class="s2">"view engine"</span><span class="p">,</span> <span class="s2">"ejs"</span><span class="p">);</span>
+
+<span class="nx">app</span><span class="p">.</span><span class="nx">use</span><span class="p">(</span><span class="nx">session</span><span class="p">({</span>
+    <span class="na">secret</span><span class="p">:</span> <span class="s2">"0d5b1363091af783a5760259a2743205b4efa2d84c0539ef544576ec8a001fc8"</span><span class="p">,</span>
+    <span class="na">resave</span><span class="p">:</span> <span class="kc">true</span><span class="p">,</span>
+    <span class="na">saveUninitialized</span><span class="p">:</span> <span class="kc">true</span>
+<span class="p">}));</span>
+<span class="nx">app</span><span class="p">.</span><span class="nx">use</span><span class="p">(</span><span class="nx">passport</span><span class="p">.</span><span class="nx">initialize</span><span class="p">());</span>
+<span class="nx">app</span><span class="p">.</span><span class="nx">use</span><span class="p">(</span><span class="nx">passport</span><span class="p">.</span><span class="nx">session</span><span class="p">());</span>
+<span class="nx">app</span><span class="p">.</span><span class="nx">use</span><span class="p">(</span><span class="nx">flash</span><span class="p">());</span>
+
+<span class="nx">require</span><span class="p">(</span><span class="s2">"./app/routes.js"</span><span class="p">)(</span><span class="nx">app</span><span class="p">,</span> <span class="nx">passport</span><span class="p">);</span>
+
+<span class="kd">const</span> <span class="nx">hs</span> <span class="o">=</span> <span class="nx">http</span><span class="p">.</span><span class="nx">createServer</span><span class="p">({},</span> <span class="nx">app</span><span class="p">);</span>
+
+<span class="nx">hs</span><span class="p">.</span><span class="nx">listen</span><span class="p">(</span><span class="nx">port</span><span class="p">);</span>
+</code></pre></div>
+<h4>Routes</h4>
+
+<p>We need to povide different routes in the application to trigger authentication and handle the callback.</p>
+<div class="highlight"><pre class="highlight javascript"><code><span class="c1">// app/route.js</span>
+
+<span class="kd">const</span> <span class="nx">config</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s2">"../config"</span><span class="p">);</span>
+
+<span class="nx">module</span><span class="p">.</span><span class="nx">exports</span> <span class="o">=</span> <span class="p">(</span><span class="nx">app</span><span class="p">,</span> <span class="nx">passport</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+
+  <span class="nx">app</span><span class="p">.</span><span class="kd">get</span><span class="p">(</span><span class="s2">"/"</span><span class="p">,</span> <span class="p">(</span><span class="nx">req</span><span class="p">,</span> <span class="nx">res</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+    <span class="nx">res</span><span class="p">.</span><span class="nx">render</span><span class="p">(</span><span class="s2">"index.ejs"</span><span class="p">);</span>
+  <span class="p">});</span>
+
+  <span class="nx">app</span><span class="p">.</span><span class="kd">get</span><span class="p">(</span><span class="s2">"/profile"</span><span class="p">,</span> <span class="nx">isLoggedIn</span><span class="p">,</span> <span class="p">(</span><span class="nx">req</span><span class="p">,</span> <span class="nx">res</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+    <span class="nx">res</span><span class="p">.</span><span class="nx">render</span><span class="p">(</span><span class="s2">"profile.ejs"</span><span class="p">,</span> <span class="p">{</span> <span class="na">user</span> <span class="p">:</span> <span class="nx">req</span><span class="p">.</span><span class="nx">user</span> <span class="p">});</span>
+  <span class="p">});</span>
+
+  <span class="nx">app</span><span class="p">.</span><span class="kd">get</span><span class="p">(</span><span class="s2">"/logout"</span><span class="p">,</span> <span class="nx">isLoggedIn</span><span class="p">,</span> <span class="k">async</span> <span class="p">(</span><span class="nx">req</span><span class="p">,</span> <span class="nx">res</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+    <span class="kd">const</span> <span class="nx">id_token_hint</span> <span class="o">=</span> <span class="nx">req</span><span class="p">.</span><span class="nx">user</span><span class="p">.</span><span class="nx">qrypto_id_token</span><span class="p">;</span>
+    <span class="kd">const</span> <span class="nx">encodedCallbackUri</span> <span class="o">=</span> <span class="nb">encodeURIComponent</span><span class="p">(</span><span class="nx">config</span><span class="p">.</span><span class="nx">callbackRoot</span><span class="p">);</span>
+    <span class="kr">await</span> <span class="nx">req</span><span class="p">.</span><span class="nx">user</span><span class="p">.</span><span class="nx">update</span><span class="p">({</span> <span class="na">qrypto_id_token</span><span class="p">:</span> <span class="kc">null</span> <span class="p">});</span>
+    <span class="nx">req</span><span class="p">.</span><span class="nx">logout</span><span class="p">();</span>
+    <span class="nx">req</span><span class="p">.</span><span class="nx">session</span><span class="p">.</span><span class="nx">destroy</span><span class="p">();</span>
+    <span class="nx">res</span><span class="p">.</span><span class="nx">redirect</span><span class="p">(</span><span class="s2">`https://srv.qryp.to/op/session/end?post_logout_redirect_uri=</span><span class="p">${</span><span class="nx">encodedCallbackUri</span><span class="p">}</span><span class="s2">&amp;id_token_hint=</span><span class="p">${</span><span class="nx">id_token_hint</span><span class="p">}</span><span class="s2">`</span><span class="p">);</span>    <span class="c1">// trailing / causes issues when there are additional parameters (?)</span>
+  <span class="p">});</span>
+
+  <span class="nx">app</span><span class="p">.</span><span class="kd">get</span><span class="p">(</span><span class="s2">"/auth/qrypto"</span><span class="p">,</span> <span class="nx">passport</span><span class="p">.</span><span class="nx">authenticate</span><span class="p">(</span><span class="s2">"openidconnect"</span><span class="p">,</span> <span class="p">{</span> <span class="na">scope</span> <span class="p">:</span> <span class="p">[</span><span class="s2">"profile"</span><span class="p">,</span> <span class="s2">"email"</span><span class="p">]</span> <span class="p">}));</span>
+
+  <span class="nx">app</span><span class="p">.</span><span class="kd">get</span><span class="p">(</span><span class="s2">"/auth/qrypto/callback"</span><span class="p">,</span> <span class="p">(</span><span class="nx">req</span><span class="p">,</span> <span class="nx">res</span><span class="p">,</span> <span class="nx">next</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+    <span class="nx">passport</span><span class="p">.</span><span class="nx">authenticate</span><span class="p">(</span><span class="s2">"openidconnect"</span><span class="p">,</span> <span class="p">(</span><span class="nx">error</span><span class="p">,</span> <span class="nx">user</span><span class="p">,</span> <span class="nx">info</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+      <span class="k">if</span> <span class="p">(</span><span class="nx">error</span><span class="p">)</span> <span class="k">return</span> <span class="nx">next</span><span class="p">(</span><span class="nx">error</span><span class="p">);</span>
+      <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="nx">user</span><span class="p">)</span> <span class="k">return</span> <span class="nx">res</span><span class="p">.</span><span class="nx">redirect</span><span class="p">(</span><span class="s2">"/"</span><span class="p">);</span>
+      <span class="nx">req</span><span class="p">.</span><span class="nx">logIn</span><span class="p">(</span><span class="nx">user</span><span class="p">,</span> <span class="p">(</span><span class="nx">error</span><span class="p">)</span> <span class="o">=&gt;</span> <span class="p">{</span>
+        <span class="k">if</span> <span class="p">(</span><span class="nx">error</span><span class="p">)</span> <span class="k">return</span> <span class="nx">next</span><span class="p">(</span><span class="nx">error</span><span class="p">);</span>
+        <span class="k">return</span> <span class="nx">res</span><span class="p">.</span><span class="nx">redirect</span><span class="p">(</span><span class="s2">"/profile"</span><span class="p">);</span>
+      <span class="p">});</span>
+    <span class="p">})(</span><span class="nx">req</span><span class="p">,</span> <span class="nx">res</span><span class="p">,</span> <span class="nx">next</span><span class="p">);</span>
+  <span class="p">});</span>
+
+<span class="p">};</span>
+
+<span class="kd">function</span> <span class="nx">isLoggedIn</span><span class="p">(</span><span class="nx">req</span><span class="p">,</span> <span class="nx">res</span><span class="p">,</span> <span class="nx">next</span><span class="p">)</span> <span class="p">{</span>
+  <span class="k">if</span> <span class="p">(</span><span class="nx">req</span><span class="p">.</span><span class="nx">isAuthenticated</span><span class="p">())</span> <span class="k">return</span> <span class="nx">next</span><span class="p">();</span>
+  <span class="nx">res</span><span class="p">.</span><span class="nx">redirect</span><span class="p">(</span><span class="s2">"/"</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+<h4>User Model</h4>
+
+<p>User model to store the user&rsquo;s information in Sqlite database.</p>
+<div class="highlight"><pre class="highlight javascript"><code><span class="c1">// app/models/user.js</span>
+
+<span class="kd">const</span> <span class="nx">Sequelize</span> <span class="o">=</span> <span class="nx">require</span><span class="p">(</span><span class="s2">"sequelize"</span><span class="p">);</span>
+<span class="kd">const</span> <span class="nx">sequelize</span> <span class="o">=</span> <span class="k">new</span> <span class="nx">Sequelize</span><span class="p">(</span><span class="s2">"sqlite:db/initech.db"</span><span class="p">);</span>
+
+<span class="kd">const</span> <span class="nx">User</span> <span class="o">=</span> <span class="nx">sequelize</span><span class="p">.</span><span class="nx">define</span><span class="p">(</span>
+  <span class="s2">"user"</span><span class="p">,</span>
+  <span class="p">{</span>
+    <span class="na">qrypto_id</span><span class="p">:</span> <span class="p">{</span> <span class="na">type</span><span class="p">:</span> <span class="nx">Sequelize</span><span class="p">.</span><span class="nx">STRING</span><span class="p">,</span> <span class="na">allowNull</span><span class="p">:</span> <span class="kc">false</span> <span class="p">},</span>
+    <span class="na">qrypto_id_token</span><span class="p">:</span> <span class="p">{</span> <span class="na">type</span><span class="p">:</span> <span class="nx">Sequelize</span><span class="p">.</span><span class="nx">STRING</span><span class="p">,</span> <span class="na">allowNull</span><span class="p">:</span> <span class="kc">true</span> <span class="p">}</span>
+  <span class="p">},</span>
+  <span class="p">{</span>
+    <span class="na">timestamps</span><span class="p">:</span> <span class="kc">false</span>
+  <span class="p">}</span>
+<span class="p">);</span>
+
+<span class="nx">module</span><span class="p">.</span><span class="nx">exports</span> <span class="o">=</span> <span class="nx">User</span><span class="p">;</span>
+</code></pre></div>
+<h4>Index View</h4>
+
+<p>Default view to render the login links to the users.</p>
+<div class="highlight"><pre class="highlight html"><code><span class="c">&lt;!-- app/views/index.ejs --&gt;</span>
+
+<span class="cp">&lt;!doctype html&gt;</span>
+<span class="nt">&lt;html&gt;</span>
+
+  <span class="nt">&lt;head&gt;</span>
+    <span class="nt">&lt;title&gt;</span>Initech Data Factory<span class="nt">&lt;/title&gt;</span>
+    <span class="nt">&lt;link</span> <span class="na">href=</span><span class="s">"https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css"</span> <span class="na">rel=</span><span class="s">"stylesheet"</span> <span class="na">integrity=</span><span class="s">"sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO"</span> <span class="na">crossorigin=</span><span class="s">"anonymous"</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;link</span> <span class="na">href=</span><span class="s">"https://stackpath.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css"</span> <span class="na">rel=</span><span class="s">"stylesheet"</span> <span class="na">integrity=</span><span class="s">"sha384-wvfXpqpZZVQGK6TAh5PVlGOfQNHSoD2xbE+QkPxCAFlNEevoEH3Sl0sibVcOQVnN"</span> <span class="na">crossorigin=</span><span class="s">"anonymous"</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;style&gt;</span>
+      <span class="nt">body</span> <span class="p">{</span> <span class="nl">padding-top</span><span class="p">:</span> <span class="m">80px</span><span class="p">;</span> <span class="p">}</span>
+    <span class="nt">&lt;/style&gt;</span>
+  <span class="nt">&lt;/head&gt;</span>
+
+  <span class="nt">&lt;body&gt;</span>
+    <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"container"</span><span class="nt">&gt;</span>
+      <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"jumbotron text-center"</span><span class="nt">&gt;</span>
+        <span class="nt">&lt;h1&gt;&lt;span</span> <span class="na">class=</span><span class="s">"fa fa-lock"</span><span class="nt">&gt;&lt;/span&gt;</span> Initech Data Factory<span class="nt">&lt;/h1&gt;</span>
+        <span class="nt">&lt;a</span> <span class="na">href=</span><span class="s">"/auth/qrypto"</span> <span class="na">class=</span><span class="s">"btn btn-success mb-3"</span><span class="nt">&gt;&lt;span</span> <span class="na">class=</span><span class="s">"fa fa-openid"</span><span class="nt">&gt;&lt;/span&gt;</span> Log in with Qrypto<span class="nt">&lt;/a&gt;</span>
+      <span class="nt">&lt;/div&gt;</span>
+      <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"text-center"</span><span class="nt">&gt;</span>
+        <span class="nt">&lt;p&gt;</span>A demo by <span class="nt">&lt;a</span> <span class="na">href=</span><span class="s">"http://qryp.to"</span><span class="nt">&gt;</span>Qrypto<span class="nt">&lt;/a&gt;</span>.<span class="nt">&lt;/p&gt;</span>
+      <span class="nt">&lt;/div&gt;</span>
+    <span class="nt">&lt;/div&gt;</span>
+    <span class="nt">&lt;script </span><span class="na">src=</span><span class="s">"https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js"</span> <span class="na">integrity=</span><span class="s">"sha384-ChfqqxuZUCnJSK3+MXmPNIyE6ZbWh2IMqE241rYiqJxyMiZ6OW/JmZQ5stwEULTy"</span> <span class="na">crossorigin=</span><span class="s">"anonymous"</span><span class="nt">&gt;&lt;/script&gt;</span>
+  <span class="nt">&lt;/body&gt;</span>
+
+<span class="nt">&lt;/html&gt;</span>
+</code></pre></div>
+<h4>Profile View</h4>
+
+<p>Profile view, to render, once the if the user is successfully logged in.</p>
+<div class="highlight"><pre class="highlight html"><code><span class="c">&lt;!-- app/views/profile.ejs --&gt;</span>
+
+<span class="cp">&lt;!doctype html&gt;</span>
+<span class="nt">&lt;html&gt;</span>
+
+  <span class="nt">&lt;head&gt;</span>
+    <span class="nt">&lt;title&gt;</span>Initech Data Factory<span class="nt">&lt;/title&gt;</span>
+    <span class="nt">&lt;link</span> <span class="na">href=</span><span class="s">"https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/css/bootstrap.min.css"</span> <span class="na">rel=</span><span class="s">"stylesheet"</span> <span class="na">integrity=</span><span class="s">"sha384-MCw98/SFnGE8fJT3GXwEOngsV7Zt27NXFoaoApmYm81iuXoPkFOJwJ8ERdknLPMO"</span> <span class="na">crossorigin=</span><span class="s">"anonymous"</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;link</span> <span class="na">href=</span><span class="s">"https://stackpath.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css"</span> <span class="na">rel=</span><span class="s">"stylesheet"</span> <span class="na">integrity=</span><span class="s">"sha384-wvfXpqpZZVQGK6TAh5PVlGOfQNHSoD2xbE+QkPxCAFlNEevoEH3Sl0sibVcOQVnN"</span> <span class="na">crossorigin=</span><span class="s">"anonymous"</span><span class="nt">&gt;</span>
+    <span class="nt">&lt;style&gt;</span>
+      <span class="nt">body</span> <span class="p">{</span> <span class="nl">padding-top</span><span class="p">:</span> <span class="m">80px</span><span class="p">;</span> <span class="nl">word-wrap</span><span class="p">:</span> <span class="n">break-word</span><span class="p">;</span> <span class="p">}</span>
+    <span class="nt">&lt;/style&gt;</span>
+  <span class="nt">&lt;/head&gt;</span>
+
+  <span class="nt">&lt;body&gt;</span>
+    <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"container"</span><span class="nt">&gt;</span>
+      <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"page-header text-center"</span><span class="nt">&gt;</span>
+        <span class="nt">&lt;h1&gt;&lt;span</span> <span class="na">class=</span><span class="s">"fa fa-anchor"</span><span class="nt">&gt;&lt;/span&gt;</span> User Profile<span class="nt">&lt;/h1&gt;</span>
+        <span class="nt">&lt;a</span> <span class="na">href=</span><span class="s">"/logout"</span> <span class="na">class=</span><span class="s">"btn btn-light btn-sm"</span><span class="nt">&gt;</span>Logout<span class="nt">&lt;/a&gt;</span>
+      <span class="nt">&lt;/div&gt;</span>
+      <span class="nt">&lt;br/&gt;</span>
+      <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"card-deck"</span><span class="nt">&gt;</span>
+        <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"col-auto mb-3"</span><span class="nt">&gt;</span>
+          <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"card"</span><span class="nt">&gt;</span>
+            <span class="nt">&lt;h3</span> <span class="na">class=</span><span class="s">"card-header"</span><span class="nt">&gt;&lt;span</span> <span class="na">class=</span><span class="s">"fa fa-openid"</span><span class="nt">&gt;&lt;/span&gt;</span> Qrypto<span class="nt">&lt;/h3&gt;</span>
+            <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"card-body"</span><span class="nt">&gt;</span>
+              <span class="nt">&lt;p</span> <span class="na">class=</span><span class="s">"card-text"</span><span class="nt">&gt;</span>
+                <span class="nt">&lt;strong&gt;</span>id<span class="nt">&lt;/strong&gt;</span>: <span class="nt">&lt;</span><span class="err">%=</span> <span class="na">user</span><span class="err">.</span><span class="na">qrypto_id</span> <span class="err">%</span><span class="nt">&gt;&lt;br&gt;</span>
+              <span class="nt">&lt;/p&gt;</span>
+            <span class="nt">&lt;/div&gt;</span>
+            <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"card-footer"</span><span class="nt">&gt;&lt;small</span> <span class="na">class=</span><span class="s">"text-muted"</span><span class="nt">&gt;&lt;/small&gt;&lt;/div&gt;</span>
+          <span class="nt">&lt;/div&gt;</span>
+        <span class="nt">&lt;/div&gt;</span>
+      <span class="nt">&lt;/div&gt;</span>
+      <span class="nt">&lt;div</span> <span class="na">class=</span><span class="s">"text-center"</span><span class="nt">&gt;</span>
+          <span class="nt">&lt;p&gt;</span>A demo by <span class="nt">&lt;a</span> <span class="na">href=</span><span class="s">"http://qryp.to"</span><span class="nt">&gt;</span>Qrypto<span class="nt">&lt;/a&gt;</span>.<span class="nt">&lt;/p&gt;</span>
+      <span class="nt">&lt;/div&gt;</span>
+    <span class="nt">&lt;/div&gt;</span>
+    <span class="nt">&lt;script </span><span class="na">src=</span><span class="s">"https://stackpath.bootstrapcdn.com/bootstrap/4.1.3/js/bootstrap.min.js"</span> <span class="na">integrity=</span><span class="s">"sha384-ChfqqxuZUCnJSK3+MXmPNIyE6ZbWh2IMqE241rYiqJxyMiZ6OW/JmZQ5stwEULTy"</span> <span class="na">crossorigin=</span><span class="s">"anonymous"</span><span class="nt">&gt;&lt;/script&gt;</span>
+  <span class="nt">&lt;/body&gt;</span>
+
+<span class="nt">&lt;/html&gt;</span>
+</code></pre></div>
+  </body>
+</html>
